@@ -21,13 +21,20 @@ const scrollTo_ = id => document.getElementById(id)?.scrollIntoView({ behavior: 
 function Layout({ children }) {
   const s = S.useStore(), u = S.currentUser(s), { settings: st } = s
   const go = useNavigate(), loc = useLocation(), home = loc.pathname === '/'
-  const [q, setQ] = useState(''), [open, setOpen] = useState(false)
+  const [q, setQ] = useState(''), [open, setOpen] = useState(false), popRef = useRef(null)
   const goto = id => { if (!home) go('/'); setTimeout(() => scrollTo_(id), 60) }
   const top = () => { setOpen(false); setQ(''); go('/'); scrollTo({ top: 0, behavior: 'smooth' }) }
-  const toggleSearch = () => { setOpen(!open); if (open) setQ('') }
   const onSearch = v => { setQ(v); if (!home) go('/') }
+  const submit = e => { e.preventDefault(); setOpen(false); if (!home) go('/'); setTimeout(() => scrollTo_('products'), 60) }
   const userPage = ['/login', '/signup', '/profile'].includes(loc.pathname)
-  return (<Q.Provider value={{ q }}>
+  useEffect(() => { // بستن جعبه جستجو با کلیک بیرون یا Esc
+    if (!open) return
+    const onDown = e => { if (popRef.current?.contains(e.target) || e.target.closest?.('[data-search-toggle]')) return; setOpen(false) }
+    const onKey = e => { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('pointerdown', onDown); document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('pointerdown', onDown); document.removeEventListener('keydown', onKey) }
+  }, [open])
+  return (<Q.Provider value={{ q, clear: () => setQ('') }}>
     <div className="topbar">{st.topBar}</div>
     <header className="header"><div className="wrap bar">
       <Link to="/" className="logo">
@@ -40,20 +47,25 @@ function Layout({ children }) {
         <button className="lnk" onClick={() => goto('reviews')}>نظرات</button>
       </nav>
       <div className="acts">
-        <button className="iconbtn" onClick={toggleSearch} title="جستجو">{SearchI}</button>
-        <Link to="/cart" className="cart" title="سبد خرید">{Bag}<i>{S.fa(S.cartCount(s))}</i></Link>
+        <button className="iconbtn" data-search-toggle onClick={() => setOpen(!open)} title="جستجو" aria-label="جستجو" aria-expanded={open}>{SearchI}</button>
+        <Link to="/cart" className="iconbtn cart" title="سبد خرید" aria-label="سبد خرید">{Bag}<i>{S.fa(S.cartCount(s))}</i></Link>
         {u ? <Link className="btn sm ghost" to="/profile">{S.fullName(u)}</Link>
           : <><Link className="btn sm ghost" to="/login">ورود</Link><Link className="btn sm" to="/signup">ثبت‌نام</Link></>}
       </div>
-    </div></header>
-    {open && <div className="searchbar"><div className="wrap"><input autoFocus placeholder="جستجوی محصول…" value={q} onChange={e => onSearch(e.target.value)} /></div></div>}
+    </div>
+    {open && <form className="searchpop" ref={popRef} role="search" onSubmit={submit}>
+      <span className="sicon">{SearchI}</span>
+      <input autoFocus placeholder="جستجوی محصول…" value={q} onChange={e => onSearch(e.target.value)} aria-label="جستجوی محصول" />
+      {q && <button type="button" className="sclear" aria-label="پاک کردن" onClick={() => setQ('')}>×</button>}
+    </form>}
+    </header>
     {children}
     <footer className="footer">© ایل بافت — فروشگاه فرش و محصولات دستباف</footer>
     <div className="dock"><span>{Box}ارسال سریع به سراسر کشور</span><span>{Shield}ضمانت اصالت کالا</span><span>{Card}پرداخت امن و مطمئن</span></div>
     <div className="tabbar" role="navigation" aria-label="ناوبری موبایل">
       <button className={home && !open ? 'on' : ''} onClick={top}><span className="ico">{HomeI}</span>خانه</button>
       <button onClick={() => goto('cats')}><span className="ico">{Grid}</span>دسته‌بندی‌ها</button>
-      <button className={open ? 'on' : ''} onClick={toggleSearch}><span className="ico">{SearchI}</span>جستجو</button>
+      <button className={open ? 'on' : ''} data-search-toggle onClick={() => setOpen(!open)}><span className="ico">{SearchI}</span>جستجو</button>
       <button className={loc.pathname === '/cart' ? 'on' : ''} onClick={() => go('/cart')}><span className="ico">{Bag}<i>{S.fa(S.cartCount(s))}</i></span>سبد خرید</button>
       <button className={userPage ? 'on' : ''} onClick={() => go(u ? '/profile' : '/login')}><span className="ico">{UserI}</span>{u ? (u.firstName || 'پروفایل') : 'پروفایل'}</button>
     </div>
@@ -61,9 +73,14 @@ function Layout({ children }) {
 }
 
 function Reviews({ s, u, productId }) {
-  const [f, setF] = useState({ rating: 5, text: '' }), [sent, setSent] = useState(false)
+  const [f, setF] = useState({ rating: 5, text: '' }), [sent, setSent] = useState(false), [msg, setMsg] = useState('')
   const list = s.reviews.filter(r => r.approved && (!productId || r.productId === productId))
-  const submit = e => { e.preventDefault(); S.addReview({ name: S.fullName(u), productId, rating: +f.rating, text: f.text }); setF({ rating: 5, text: '' }); setSent(true) }
+  const submit = e => {
+    e.preventDefault()
+    const r = S.addReview({ name: S.fullName(u), productId, rating: +f.rating, text: f.text })
+    if (r) { setMsg(r); setSent(false); return }
+    setF({ rating: 5, text: '' }); setSent(true); setMsg('')
+  }
   return (<section id="reviews" className={'sec' + (productId ? '' : ' wrap')}>
     <h2 className="title">{productId ? 'نظرات درباره این محصول' : 'نظرات مشتریان'}</h2>
     <div className="grid g3">{list.map(r => <div className="card pad" key={r.id}>
@@ -75,6 +92,7 @@ function Reviews({ s, u, productId }) {
         <select value={f.rating} onChange={e => setF({ ...f, rating: e.target.value })}>{[5, 4, 3, 2, 1].map(n => <option key={n} value={n}>{S.fa(n)} ستاره</option>)}</select>
         <textarea required placeholder="نظر خود را بنویسید…" value={f.text} onChange={e => setF({ ...f, text: e.target.value })} />
         <button className="btn">ارسال نظر</button>
+        {msg && <p className="err">{msg}</p>}
         {sent && <p className="ok">نظر شما ثبت شد و پس از تایید مدیر نمایش داده می‌شود.</p>}</form>
         : <p>برای ثبت نظر ابتدا <Link to="/login" state={{ from: productId ? `/product/${productId}` : '/' }}>وارد شوید</Link>.</p>}
     </div>
@@ -106,9 +124,9 @@ function Strip({ id, title, em, list, s, onAll }) {
 }
 
 function Home() {
-  const s = S.useStore(), u = S.currentUser(s), st = s.settings, { q } = useContext(Q)
-  const [cat, setCat] = useState(''), [all, setAll] = useState(false)
-  useEffect(() => { if (q) scrollTo_('products') }, [q])
+  const s = S.useStore(), u = S.currentUser(s), st = s.settings, { q, clear } = useContext(Q)
+  const [cat, setCat] = useState(''), [all, setAll] = useState(false), prevQ = useRef('')
+  useEffect(() => { if (q && !prevQ.current) scrollTo_('products'); prevQ.current = q }, [q]) // فقط با اولین حرف اسکرول شود
   const items = s.products.filter(p => (!cat || p.categoryId === cat) && (!q || (p.name + p.desc + S.catName(s, p)).includes(q.trim())))
   const catTitle = st.categories.find(c => c.id === cat)?.name
   const newest = [...s.products].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).slice(0, 8)
@@ -125,7 +143,9 @@ function Home() {
     {filtered
       ? <section id="products" className="wrap sec">
           <div className="nhead"><h2>{q ? 'نتایج جستجو' : <>محصولات <em>ویژه</em></>}{catTitle && ` — ${catTitle}`}</h2>
-            {all && !q && !cat && <button className="lnk redlnk" onClick={() => setAll(false)}>نمایش کمتر ›</button>}</div>
+            {q ? <button className="lnk redlnk" onClick={clear}>پاک کردن جستجو ×</button>
+              : cat ? <button className="lnk redlnk" onClick={() => setCat('')}>حذف فیلتر ×</button>
+              : all && <button className="lnk redlnk" onClick={() => setAll(false)}>نمایش کمتر ›</button>}</div>
           <div className="grid g4">{items.map(p => <ProductCard key={p.id} p={p} s={s} />)}{!items.length && <p>محصولی پیدا نشد.</p>}</div></section>
       : <Strip id="products" title="محصولات" em="ویژه" list={items} s={s} onAll={showAll} />}
     <Reviews s={s} u={u} />
@@ -135,6 +155,7 @@ function Home() {
 function ProductPage() {
   const { id } = useParams(), s = S.useStore(), u = S.currentUser(s), p = s.products.find(x => x.id === id)
   const [added, setAdded] = useState('')
+  useEffect(() => { if (!p) return; document.title = `${p.name} | ایل بافت`; return () => { document.title = 'ایل بافت | فروشگاه فرش' } }, [p?.name])
   if (!p) return (<div className="wrap sec empty"><h2>محصول پیدا نشد</h2><Link className="btn" to="/">بازگشت به فروشگاه</Link></div>)
   const out = !(p.stock > 0)
   const add = () => { const r = S.addToCart(p.id); setAdded(r || 'ok'); setTimeout(() => setAdded(''), 1600) }
@@ -163,6 +184,7 @@ function ProductPage() {
 function Auth({ mode }) {
   const loc = useLocation(), s = S.useStore()
   const [f, setF] = useState({ firstName: '', lastName: '', phone: '', email: '', password: '', again: '' }), [err, setErr] = useState(''), [show, setShow] = useState(false)
+  useEffect(() => { setErr('') }, [mode])
   const isUp = mode === 'signup', from = loc.state?.from || '/'
   if (S.currentUser(s)) return <Navigate to={from} replace />
   const set = k => e => setF({ ...f, [k]: e.target.value })
@@ -191,14 +213,15 @@ function Auth({ mode }) {
 }
 
 function InfoTab({ u }) {
-  const [f, setF] = useState({ firstName: u.firstName || '', lastName: u.lastName || '', email: u.email || '' }), [ok, setOk] = useState(false)
+  const [f, setF] = useState({ firstName: u.firstName || '', lastName: u.lastName || '', email: u.email || '' }), [ok, setOk] = useState(false), [err, setErr] = useState('')
   const set = k => e => setF({ ...f, [k]: e.target.value })
-  const save = e => { e.preventDefault(); S.updateProfile({ ...f, email: f.email.trim().toLowerCase() }); setOk(true); setTimeout(() => setOk(false), 2000) }
+  const save = e => { e.preventDefault(); const r = S.updateProfile(f); if (r) return setErr(r); setErr(''); setOk(true); setTimeout(() => setOk(false), 2000) }
   return (<form className="card pad pform" onSubmit={save}><h3>اطلاعات کاربری</h3>
     <input required placeholder="نام" value={f.firstName} onChange={set('firstName')} />
     <input required placeholder="نام خانوادگی" value={f.lastName} onChange={set('lastName')} />
     <input type="email" placeholder="ایمیل (اختیاری)" value={f.email} onChange={set('email')} dir="ltr" />
     {u.phone && <><input value={u.phone} disabled dir="ltr" /><small className="hint">شماره موبایل قابل تغییر نیست.</small></>}
+    {err && <p className="err">{err}</p>}
     <button className="btn">ذخیره تغییرات</button>{ok && <span className="ok"> ذخیره شد ✓</span>}</form>)
 }
 
@@ -212,7 +235,7 @@ function AddressTab({ u }) {
       <input required placeholder="عنوان (مثلاً خانه)" value={f.title} onChange={set('title')} />
       <input required placeholder="استان و شهر" value={f.city} onChange={set('city')} />
       <textarea required placeholder="آدرس کامل" value={f.text} onChange={set('text')} />
-      <input placeholder="کد پستی" value={f.postal} onChange={set('postal')} dir="ltr" inputMode="numeric" />
+      <input placeholder="کد پستی (۱۰ رقم)" pattern="[0-9۰-۹]{10}" title="کد پستی ۱۰ رقمی" value={f.postal} onChange={set('postal')} dir="ltr" inputMode="numeric" />
       <button className="btn">{f.id ? 'ذخیره تغییرات' : 'افزودن آدرس'}</button>
       {f.id && <button type="button" className="btn ghost dark" onClick={() => setF(empty)}>انصراف</button>}</form>
     <div>{u.addresses.map(a => <div className="card pad prow" key={a.id}>
@@ -249,7 +272,7 @@ function CartPage() {
   const s = S.useStore(), u = S.currentUser(s), go = useNavigate(), [msg, setMsg] = useState(''), [aid, setAid] = useState('')
   const rows = S.getCart(s).map(i => ({ ...i, p: s.products.find(p => p.id === i.id) })).filter(r => r.p)
   const total = rows.reduce((n, r) => n + r.p.price * r.qty, 0)
-  const addrs = u?.addresses || [], addr = aid || addrs[0]?.id
+  const addrs = u?.addresses || [], addr = addrs.find(a => a.id === aid)?.id || addrs[0]?.id
   const pay = () => {
     if (!u) return go('/login', { state: { from: '/cart' } })
     if (!addr) return setMsg('noaddr')

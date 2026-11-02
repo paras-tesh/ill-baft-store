@@ -4,7 +4,12 @@ import * as S from './store.js'
 function ImgInput({ label, value, onChange, max = 1200, type }) {
   return (<label className="imgin"><span>{label}</span>
     {value && <img src={value} alt="" />}
-    <input type="file" accept="image/*" onChange={async e => e.target.files[0] && onChange(await S.readImage(e.target.files[0], max, type))} />
+    <input type="file" accept="image/*" onChange={async e => {
+      const file = e.target.files[0]; e.target.value = '' // انتخاب دوباره همان فایل هم کار کند
+      if (!file) return
+      const url = await S.readImage(file, max, type)
+      url ? onChange(url) : alert('این فایل عکس معتبر نیست.')
+    }} />
     {value && <button type="button" className="btn sm ghost" onClick={() => onChange('')}>حذف عکس</button>}</label>)
 }
 
@@ -12,7 +17,7 @@ function Products({ s }) {
   const empty = { name: '', price: '', categoryId: s.settings.categories[0].id, stock: 1, desc: '', size: '', material: '', image: '' }
   const [f, setF] = useState(empty)
   const set = k => e => setF({ ...f, [k]: e.target.value })
-  const submit = e => { e.preventDefault(); S.saveProduct({ ...f, price: +f.price, stock: Math.max(0, +f.stock || 0) }); setF(empty) }
+  const submit = e => { e.preventDefault(); if (S.saveProduct({ ...f, price: +f.price, stock: Math.max(0, +f.stock || 0) })) setF(empty) }
   return (<div className="two">
     <form className="card pad" onSubmit={submit}>
       <h3>{f.id ? 'ویرایش محصول' : 'محصول جدید'}</h3>
@@ -39,7 +44,7 @@ function Site({ s }) {
   const [d, setD] = useState(s.settings), [ok, setOk] = useState(false)
   const set = k => e => setD({ ...d, [k]: e.target.value })
   const cat = (i, patch) => setD({ ...d, categories: d.categories.map((c, j) => (j === i ? { ...c, ...patch } : c)) })
-  const save = e => { e.preventDefault(); S.saveSettings(d); setOk(true); setTimeout(() => setOk(false), 2000) }
+  const save = e => { e.preventDefault(); if (!S.saveSettings(d)) return; setOk(true); setTimeout(() => setOk(false), 2000) }
   return (<form className="card pad" onSubmit={save}>
     <h3>لوگو و متن‌ها</h3>
     <ImgInput label="لوگو (PNG شفاف بهتر است)" value={d.logo} onChange={logo => setD({ ...d, logo })} max={400} type="image/png" />
@@ -52,7 +57,7 @@ function Site({ s }) {
     <ImgInput label="عکس بنر — موبایل (مربع یا عمودی)" value={d.heroImageMobile} onChange={heroImageMobile => setD({ ...d, heroImageMobile })} max={900} />
     <h3>بنر دسته‌بندی محصولات</h3>
     {d.categories.map((c, i) => <div key={c.id} className="catedit">
-      <input value={c.name} onChange={e => cat(i, { name: e.target.value })} />
+      <input required value={c.name} onChange={e => cat(i, { name: e.target.value })} />
       <ImgInput label="عکس" value={c.image} onChange={image => cat(i, { image })} max={700} /></div>)}
     <button className="btn">ذخیره تغییرات</button>{ok && <span className="ok"> ذخیره شد ✓</span>}
   </form>)

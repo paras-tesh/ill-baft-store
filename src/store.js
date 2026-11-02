@@ -24,6 +24,7 @@ const seed = {
 }
 let state
 try { state = JSON.parse(localStorage.getItem(KEY)) || seed } catch { state = seed }
+try {
 if ((state.v || 0) < 2) { // مهاجرت داده‌های قدیمی: نام و ترتیب جدید دسته‌ها
   const order = ['رانر و رومیزی', 'کوسن', 'فرشینه', 'بوم‌فرش'], idx = n => (order.indexOf(n) < 0 ? 9 : order.indexOf(n))
   state.settings.categories.forEach(c => { if (c.name === 'بومفرش') c.name = 'بوم‌فرش' })
@@ -58,18 +59,27 @@ if (state.v < 9) { // عکس پیش‌فرض دسته فرشینه
   state.settings.categories.forEach(c => { if (!c.image && CAT_IMG[c.id]) c.image = CAT_IMG[c.id] })
   state.v = 9
 }
-const subs = new Set()
-export const get = () => state
-export function update(fn) {
-  state = fn(structuredClone(state))
-  try { localStorage.setItem(KEY, JSON.stringify(state)) } catch { alert('حافظه مرورگر پر شد؛ عکس کوچک‌تری انتخاب کنید.') }
-  subs.forEach(s => s())
+} catch (e) { // دیتای خراب: نسخه پشتیبان نگه داشته می‌شود و سایت با داده اولیه باز می‌شود
+  console.error('migration failed', e)
+  try { localStorage.setItem(KEY + '_backup', localStorage.getItem(KEY)) } catch {}
+  state = structuredClone(seed)
 }
-export const useStore = () => useSyncExternalStore(cb => (subs.add(cb), () => subs.delete(cb)), get)
+const subs = new Set()
+const subscribe = cb => (subs.add(cb), () => subs.delete(cb))
+export const get = () => state
+export function update(fn) { // اگر ذخیره‌سازی ناموفق باشد، تغییر اعمال نمی‌شود
+  const next = fn(structuredClone(state))
+  try { localStorage.setItem(KEY, JSON.stringify(next)) } catch { alert('حافظه مرورگر پر شد و تغییر ذخیره نشد. عکس کوچک‌تری انتخاب کنید یا چند محصول قدیمی را حذف کنید.'); return false }
+  state = next; subs.forEach(s => s()); return true
+}
+export const useStore = () => useSyncExternalStore(subscribe, get)
+// همگام‌سازی بین تب‌ها (مثلاً پنل ادمین در یک تب و فروشگاه در تب دیگر)
+if (typeof window !== 'undefined') window.addEventListener('storage', e => { if (e.key !== KEY || !e.newValue) return; try { state = JSON.parse(e.newValue); subs.forEach(s => s()) } catch {} })
 const uid = () => Math.random().toString(36).slice(2, 9)
 
 export const currentUser = s => s.users.find(u => u.id === s.session)
-const normId = v => String(v).trim().replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).replace(/[\s-]/g, '').toLowerCase()
+const digits = v => String(v).replace(/[۰-۹٠-٩]/g, d => { const i = '۰۱۲۳۴۵۶۷۸۹'.indexOf(d); return i >= 0 ? i : '٠١٢٣٤٥٦٧٨٩'.indexOf(d) })
+const normId = v => { const t = digits(v).trim().toLowerCase(); return t.includes('@') ? t : t.replace(/[\s-]/g, '') } // ایمیل دست‌نخورده، شماره بدون فاصله و خط تیره
 export const fullName = u => `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email || u.phone
 export function login(id, password) {
   const k = normId(id)
@@ -96,10 +106,22 @@ export const saveProduct = p => update(s => {
   const i = s.products.findIndex(x => x.id === p.id)
   i >= 0 ? (s.products[i] = p) : s.products.unshift({ ...p, id: uid(), createdAt: Date.now() }); return s })
 export const deleteProduct = id => update(s => (s.products = s.products.filter(p => p.id !== id), s))
-export const addReview = r => update(s => (s.reviews.unshift({ ...r, id: uid(), approved: false, date: Date.now() }), s))
+export function addReview({ name, productId, rating, text }) { // موفق: undefined، ناموفق: متن خطا
+  const u = currentUser(get()); text = (text || '').trim()
+  if (!u) return 'برای ثبت نظر ابتدا وارد شوید.'
+  if (!text) return 'متن نظر را بنویسید.'
+  if (get().reviews.some(r => r.userId === u.id && !r.approved && r.productId === productId)) return 'نظر قبلی شما هنوز در انتظار تایید است.'
+  update(s => (s.reviews.unshift({ id: uid(), userId: u.id, name, productId, rating, text, approved: false, date: Date.now() }), s))
+}
 export const approveReview = id => update(s => (s.reviews.find(r => r.id === id).approved = true, s))
 export const deleteReview = id => update(s => (s.reviews = s.reviews.filter(r => r.id !== id), s))
-export const updateProfile = patch => update(s => (Object.assign(currentUser(s), patch), s))
+export function updateProfile({ firstName, lastName, email }) { // موفق: undefined، ناموفق: متن خطا
+  const u = currentUser(get()); email = (email || '').trim().toLowerCase()
+  if (!u) return 'ابتدا وارد حساب شوید.'
+  if (!firstName.trim() || !lastName.trim()) return 'نام و نام خانوادگی را وارد کنید.'
+  if (email && get().users.some(x => x.id !== u.id && x.email === email)) return 'این ایمیل برای حساب دیگری ثبت شده است.'
+  update(s => (Object.assign(currentUser(s), { firstName: firstName.trim(), lastName: lastName.trim(), email }), s))
+}
 export const saveAddress = a => update(s => { const u = currentUser(s), i = u.addresses.findIndex(x => x.id === a.id); i >= 0 ? (u.addresses[i] = a) : u.addresses.push({ ...a, id: uid() }); return s })
 export const deleteAddress = id => update(s => (currentUser(s).addresses = currentUser(s).addresses.filter(a => a.id !== id), s))
 export const STATUS = { pending: 'در انتظار پرداخت', paid: 'پرداخت‌شده', shipped: 'ارسال‌شده', canceled: 'لغو‌شده' }
@@ -109,8 +131,10 @@ export const money = n => fa(Number(n).toLocaleString('en-US')).replace(/,/g, '�
 export function readImage(file, max = 1000, type = 'image/jpeg') {
   return new Promise(res => {
     const r = new FileReader()
+    r.onerror = () => res(null)
     r.onload = () => {
       const i = new Image()
+      i.onerror = () => res(null)
       i.onload = () => {
         const k = Math.min(1, max / Math.max(i.width, i.height))
         const c = document.createElement('canvas'); c.width = i.width * k; c.height = i.height * k
@@ -125,13 +149,18 @@ export function readImage(file, max = 1000, type = 'image/jpeg') {
 // ---- سبد خرید (برای هر کاربر جدا؛ مهمان با کلید guest) ----
 const ck = s => s.session || 'guest'
 export const getCart = s => s.carts[ck(s)] || []
-export const cartCount = s => getCart(s).reduce((n, i) => n + i.qty, 0)
+export const cartCount = s => getCart(s).filter(i => s.products.some(p => p.id === i.id)).reduce((n, i) => n + i.qty, 0)
 export const catName = (s, p) => s.settings.categories.find(c => c.id === p.categoryId)?.name || ''
 export const usedPct = s => Math.min(100, Math.round(JSON.stringify(s).length / 50000))
 export const GATEWAY_READY = false // وقتی درگاه وصل شد true شود تا دکمه «پرداخت» نمایش داده شود
 function mergeGuest(s) {
   const g = s.carts.guest || [], mine = (s.carts[s.session] = s.carts[s.session] || [])
-  g.forEach(i => { const x = mine.find(m => m.id === i.id); x ? (x.qty += i.qty) : mine.push(i) })
+  g.forEach(i => { // تعداد از موجودی بیشتر نشود
+    const p = s.products.find(p => p.id === i.id); if (!p) return
+    const x = mine.find(m => m.id === i.id), qty = Math.min((x?.qty || 0) + i.qty, p.stock ?? 0)
+    if (qty < 1) return
+    x ? (x.qty = qty) : mine.push({ id: i.id, qty })
+  })
   s.carts.guest = []
 }
 export function addToCart(id) {
@@ -143,8 +172,10 @@ export function addToCart(id) {
 }
 export const setQty = (id, qty) => update(s => {
   const k = ck(s), c = s.carts[k] || [], p = s.products.find(p => p.id === id)
+  const it = c.find(x => x.id === id)
+  if (!it) return s
   if (qty < 1) s.carts[k] = c.filter(x => x.id !== id)
-  else c.find(x => x.id === id).qty = Math.min(qty, p?.stock ?? qty)
+  else it.qty = Math.min(qty, p?.stock ?? qty)
   return s
 })
 export const removeFromCart = id => update(s => (s.carts[ck(s)] = (s.carts[ck(s)] || []).filter(x => x.id !== id), s))
@@ -154,12 +185,16 @@ export function placeOrder(addressId) { // موفق: شیء سفارش، نام�
   if (!u || !a || !items.length) return 'اطلاعات سفارش کامل نیست.'
   const short = items.find(i => i.qty > (s0.products.find(p => p.id === i.id).stock ?? 0))
   if (short) return `موجودی «${short.name}» کافی نیست؛ تعداد را کم کنید.`
-  const o = { id: uid(), no: 1001 + s0.orders.length, userId: u.id, items, total: items.reduce((n, i) => n + i.price * i.qty, 0), address: a, status: 'pending', date: Date.now() }
+  const o = { id: uid(), no: Math.max(1000, ...s0.orders.map(o => o.no || 0)) + 1, userId: u.id, items, total: items.reduce((n, i) => n + i.price * i.qty, 0), address: a, status: 'pending', date: Date.now() }
   update(s => { s.orders.unshift(o); items.forEach(i => { s.products.find(p => p.id === i.id).stock -= i.qty }); s.carts[ck(s)] = []; return s })
   return o
 }
 export const updateOrder = (id, patch) => update(s => {
   const o = s.orders.find(o => o.id === id)
-  if (patch.status === 'canceled' && o.status !== 'canceled') o.items.forEach(i => { const p = s.products.find(p => p.id === i.id); if (p) p.stock += i.qty }) // لغو سفارش = برگشت موجودی
+  if (patch.status && patch.status !== o.status) {
+    const adj = sign => o.items.forEach(i => { const p = s.products.find(p => p.id === i.id); if (p) p.stock = Math.max(0, p.stock + sign * i.qty) })
+    if (patch.status === 'canceled') adj(+1) // لغو سفارش = برگشت موجودی
+    else if (o.status === 'canceled') adj(-1) // فعال‌کردن دوباره سفارش لغوشده = کم‌کردن موجودی
+  }
   Object.assign(o, patch); return s
 })
