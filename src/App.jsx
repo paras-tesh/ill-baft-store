@@ -21,10 +21,10 @@ const scrollTo_ = id => document.getElementById(id)?.scrollIntoView({ behavior: 
 function Layout({ children }) {
   const s = S.useStore(), u = S.currentUser(s), { settings: st } = s
   const go = useNavigate(), loc = useLocation(), home = loc.pathname === '/'
-  const [q, setQ] = useState(''), [open, setOpen] = useState(false), popRef = useRef(null)
+  const [q, setQ] = useState(''), [open, setOpen] = useState(false), popRef = useRef(null), skipClose = useRef(false)
   const goto = id => { if (!home) go('/'); setTimeout(() => scrollTo_(id), 60) }
   const top = () => { setOpen(false); setQ(''); go('/'); scrollTo({ top: 0, behavior: 'smooth' }) }
-  const onSearch = v => { setQ(v); if (!home) go('/') }
+  const onSearch = v => { setQ(v); if (!home) { skipClose.current = true; go('/') } }
   const submit = e => { e.preventDefault(); setOpen(false); if (!home) go('/'); setTimeout(() => scrollTo_('products'), 60) }
   const userPage = ['/login', '/signup', '/profile'].includes(loc.pathname)
   useEffect(() => { // بستن جعبه جستجو با کلیک بیرون یا Esc
@@ -34,6 +34,8 @@ function Layout({ children }) {
     document.addEventListener('pointerdown', onDown); document.addEventListener('keydown', onKey)
     return () => { document.removeEventListener('pointerdown', onDown); document.removeEventListener('keydown', onKey) }
   }, [open])
+  useEffect(() => { if (skipClose.current) { skipClose.current = false; return } setOpen(false) }, [loc.pathname]) // با تغییر صفحه، جعبه جستجو بسته شود
+  useEffect(() => { const close = () => setOpen(false); addEventListener('popstate', close); return () => removeEventListener('popstate', close) }, []) // دکمه بازگشت مرورگر
   return (<Q.Provider value={{ q, clear: () => setQ('') }}>
     <div className="topbar">{st.topBar}</div>
     <header className="header"><div className="wrap bar">
@@ -133,12 +135,14 @@ function Home() {
   const showAll = () => { setAll(true); setTimeout(() => scrollTo_('products'), 60) }
   const filtered = q || cat || all
   return (<>
+    <div className="fold">
     <section className="hero" style={{ '--hd': css_(st.heroImage || st.heroImageMobile), '--hm': css_(st.heroImageMobile || st.heroImage) }}><div className="wrap"><div className="herotxt">
       <p className="lead">{st.heroLine1}</p><h1>{st.heroLine2}</h1><div className="orn"><i /></div>
       <button className="btn herobtn" onClick={() => scrollTo_('products')}>مشاهده محصولات <span>←</span></button></div></div></section>
     <div id="cats" className="wrap cats">{st.categories.map(c =>
       <button key={c.id} className={'cat' + (cat === c.id ? ' on' : '')} style={bg(c.image)} onClick={() => { setCat(cat === c.id ? '' : c.id); scrollTo_('products') }}>
         <span>{c.name}</span></button>)}</div>
+    </div>
     {!filtered && <Strip title="جدیدترین" em="محصولات" list={newest} s={s} onAll={showAll} />}
     {filtered
       ? <section id="products" className="wrap sec">

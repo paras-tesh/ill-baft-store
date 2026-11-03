@@ -12,7 +12,7 @@ nav{display:flex;gap:20px;font-size:.95rem}nav a.active{color:var(--gold);border
 .btn{background:var(--red);color:#fff;border:1px solid var(--red);border-radius:10px;padding:8px 22px;font:inherit;cursor:pointer;display:inline-block}
 .btn:hover{background:var(--red2)}.btn.sm{padding:3px 14px;font-size:.85rem}.btn.ghost{background:none;color:inherit;border-color:currentColor}
 .header .btn.ghost{color:var(--gold)}.btn.danger{background:#fff;color:var(--red);margin-inline-start:6px}
-.hero{background:var(--navy);background-image:var(--hd,none);background-size:cover;background-position:center 38%;min-height:0;height:clamp(220px,calc(100vh - 400px),340px);position:relative;display:flex;align-items:center;color:var(--gold)}
+.hero{background:var(--navy);background-image:var(--hd,none);background-size:cover;background-position:center 38%;min-height:230px;position:relative;display:flex;align-items:center;color:var(--gold)}
 .hero::before{content:"";position:absolute;inset:0;background:linear-gradient(270deg,rgba(14,26,51,.97) 0,rgba(14,26,51,.92) 30%,rgba(14,26,51,0) 62%)}
 .hero .wrap{width:100%;position:relative;max-width:1500px;padding:0 clamp(18px,3vw,56px)}.herotxt{max-width:400px;margin-inline-end:auto;text-align:center;background:none;padding:12px 8px;color:var(--cream)}
 .herotxt .lead{margin:0 0 4px;font-size:1rem;line-height:1.7}
@@ -56,7 +56,7 @@ body{padding-bottom:56px}
   nav,.acts,.dock{display:none}
   .bar{justify-content:center;min-height:56px}.logo{align-items:center}
   .wrap{padding:0 14px}
-  .hero{height:clamp(200px,32vh,260px);height:clamp(200px,32svh,260px);background-image:var(--hm,none);background-position:center 20%;align-items:flex-end}
+  .hero{min-height:230px;background-image:var(--hm,none);background-position:center 20%;align-items:flex-end}
   .hero::before{background:linear-gradient(180deg,rgba(14,26,51,0) 35%,rgba(14,26,51,.94) 100%)}
   .herotxt{max-width:none;margin:0;padding:0 4px 14px;text-align:start}.herotxt .orn{display:none}.herotxt .lead{font-size:.9rem;margin:0}.herotxt h1{font-size:1.4rem;margin-bottom:6px}
   .cats{grid-template-columns:repeat(2,1fr);gap:10px}
@@ -135,3 +135,9 @@ body{padding-bottom:56px}
 .qty button:disabled{opacity:.35;cursor:not-allowed}
 @media(max-width:900px){nav{gap:14px;font-size:.9rem}.acts .btn.sm{padding:8px 16px}}
 @media(max-width:760px){.searchpop{left:14px;right:14px;width:auto}}
+
+/* صفحه اول: بنر + چهار دسته دقیقاً به اندازه یک صفحه نمایش (در همه دستگاه‌ها) */
+:root{--top:100px;--bottom:46px}
+.fold{display:flex;flex-direction:column;min-height:min(calc(100vh - var(--top) - var(--bottom)),880px);min-height:min(calc(100svh - var(--top) - var(--bottom)),880px)}
+.fold .hero{flex:1 1 auto}.fold .cats{width:100%;margin-block:16px}
+@media(max-width:760px){:root{--top:88px;--bottom:calc(70px + env(safe-area-inset-bottom,0px))}}
