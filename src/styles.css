@@ -137,7 +137,11 @@ body{padding-bottom:56px}
 @media(max-width:760px){.searchpop{left:14px;right:14px;width:auto}}
 
 /* صفحه اول: بنر + چهار دسته دقیقاً به اندازه یک صفحه نمایش (در همه دستگاه‌ها) */
-:root{--top:100px;--bottom:46px}
-.fold{display:flex;flex-direction:column;min-height:min(calc(100vh - var(--top) - var(--bottom)),880px);min-height:min(calc(100svh - var(--top) - var(--bottom)),880px)}
-.fold .hero{flex:1 1 auto}.fold .cats{width:100%;margin-block:16px}
-@media(max-width:760px){:root{--top:88px;--bottom:calc(70px + env(safe-area-inset-bottom,0px))}}
+:root{--top:98px;--bottom:44px}
+.fold{display:flex;flex-direction:column;min-height:min(calc(100vh - var(--top) - var(--bottom)),960px);min-height:min(calc(100svh - var(--top) - var(--bottom)),960px)}
+.fold .hero{flex:1 1 auto}.fold .cats{width:100%;margin-block:10px 12px}
+@media(max-width:760px){:root{--top:84px;--bottom:calc(62px + env(safe-area-inset-bottom,0px))}}
+
+/* مرز تمیز عکس‌ها: جلوگیری از تکرار عکس در لبه/حاشیه کادر */
+.cat,.pimg,.pbig,.thumb,.hero{background-repeat:no-repeat}
+.cat{background-origin:border-box;background-clip:border-box}
