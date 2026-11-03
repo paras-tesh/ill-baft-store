@@ -9,9 +9,6 @@ const Grid = <Ic d={<><rect x="4" y="4" width="16" height="7" rx="2" /><rect x="
 const SearchI = <Ic d={<><circle cx="11" cy="11" r="6" /><path d="M20 20l-4-4" /></>} />
 const UserI = <Ic d={<><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-6 8-6s8 2 8 6" /></>} />
 const Bag = <Ic d={<><path d="M5 8h14l-1 12H6L5 8z" /><path d="M9 8V6a3 3 0 0 1 6 0v2" /></>} />
-const Box = <Ic size={20} d={<><path d="M12 3l8 4v10l-8 4-8-4V7l8-4z" /><path d="M4 7l8 4 8-4M12 11v10" /></>} />
-const Shield = <Ic size={20} d={<><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" /><path d="M9 12l2 2 4-4" /></>} />
-const Card = <Ic size={20} d={<><rect x="3" y="6" width="18" height="12" rx="2" /><path d="M3 10h18M7 15h4" /></>} />
 
 const css_ = x => (x ? `url(${x})` : 'none')
 const bg = img => (img ? { backgroundImage: `url(${img})` } : {})
@@ -46,7 +43,6 @@ function Layout({ children }) {
       <nav>
         <NavLink to="/" end>صفحه اصلی</NavLink>
         <button className="lnk" onClick={() => goto('products')}>محصولات</button>
-        <button className="lnk" onClick={() => goto('reviews')}>نظرات</button>
       </nav>
       <div className="acts">
         <button className="iconbtn" data-search-toggle onClick={() => setOpen(!open)} title="جستجو" aria-label="جستجو" aria-expanded={open}>{SearchI}</button>
@@ -62,8 +58,7 @@ function Layout({ children }) {
     </form>}
     </header>
     {children}
-    <footer className="footer">© ایل بافت — فروشگاه فرش و محصولات دستباف</footer>
-    <div className="dock"><span>{Box}ارسال سریع به سراسر کشور</span><span>{Shield}ضمانت اصالت کالا</span><span>{Card}پرداخت امن و مطمئن</span></div>
+    <SiteFooter st={st} />
     <div className="tabbar" role="navigation" aria-label="ناوبری موبایل">
       <button className={home && !open ? 'on' : ''} onClick={top}><span className="ico">{HomeI}</span>خانه</button>
       <button onClick={() => goto('cats')}><span className="ico">{Grid}</span>دسته‌بندی‌ها</button>
@@ -76,18 +71,17 @@ function Layout({ children }) {
 
 function Reviews({ s, u, productId }) {
   const [f, setF] = useState({ rating: 5, text: '' }), [sent, setSent] = useState(false), [msg, setMsg] = useState('')
-  const list = s.reviews.filter(r => r.approved && (!productId || r.productId === productId))
+  const list = s.reviews.filter(r => r.approved && r.productId === productId)
   const submit = e => {
     e.preventDefault()
     const r = S.addReview({ name: S.fullName(u), productId, rating: +f.rating, text: f.text })
     if (r) { setMsg(r); setSent(false); return }
     setF({ rating: 5, text: '' }); setSent(true); setMsg('')
   }
-  return (<section id="reviews" className={'sec' + (productId ? '' : ' wrap')}>
-    <h2 className="title">{productId ? 'نظرات درباره این محصول' : 'نظرات مشتریان'}</h2>
+  return (<section id="reviews" className="sec">
+    <h2 className="title">نظرات درباره این محصول</h2>
     <div className="grid g3">{list.map(r => <div className="card pad" key={r.id}>
-      <div className="stars">{'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}</div><p>{r.text}</p><small>{r.name}</small>
-      {!productId && r.productId && <small> — درباره: {s.products.find(p => p.id === r.productId)?.name}</small>}</div>)}
+      <div className="stars">{'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}</div><p>{r.text}</p><small>{r.name}</small></div>)}
       {!list.length && <p>هنوز نظری ثبت نشده است.</p>}</div>
     <div className="card pad formbox">
       {u ? <form onSubmit={submit}><h3>نظر شما</h3>
@@ -96,7 +90,7 @@ function Reviews({ s, u, productId }) {
         <button className="btn">ارسال نظر</button>
         {msg && <p className="err">{msg}</p>}
         {sent && <p className="ok">نظر شما ثبت شد و پس از تایید مدیر نمایش داده می‌شود.</p>}</form>
-        : <p>برای ثبت نظر ابتدا <Link to="/login" state={{ from: productId ? `/product/${productId}` : '/' }}>وارد شوید</Link>.</p>}
+        : <p>برای ثبت نظر ابتدا <Link to="/login" state={{ from: `/product/${productId}` }}>وارد شوید</Link>.</p>}
     </div>
   </section>)
 }
@@ -125,35 +119,69 @@ function Strip({ id, title, em, list, s, onAll }) {
     <div className="strip" ref={ref}>{list.map(p => <ProductCard key={p.id} p={p} s={s} />)}</div></section>)
 }
 
+function Hero({ st }) {
+  const ref = useRef(null)
+  const [mobile, setMobile] = useState(() => matchMedia('(max-width:760px)').matches), [dims, setDims] = useState({ box: null, img: null })
+  const url = mobile ? (st.heroImageMobile || st.heroImage) : (st.heroImage || st.heroImageMobile)
+  const focus = (mobile ? st.heroFocus?.m : st.heroFocus?.d) || { x: 0.5, y: 0.5 }
+  useEffect(() => { const mq = matchMedia('(max-width:760px)'), on = () => setMobile(mq.matches); mq.addEventListener('change', on); return () => mq.removeEventListener('change', on) }, [])
+  useEffect(() => { if (!url) return; const i = new Image(); i.onload = () => setDims(d => ({ ...d, img: [i.naturalWidth, i.naturalHeight] })); i.src = url }, [url])
+  useEffect(() => { const el = ref.current; if (!el) return; const ro = new ResizeObserver(() => setDims(d => ({ ...d, box: [el.clientWidth, el.clientHeight] }))); ro.observe(el); return () => ro.disconnect() }, [])
+  return (<section ref={ref} className="hero" style={{ backgroundImage: css_(url), backgroundPosition: S.focusPos(dims.box, dims.img, focus) }}><div className="wrap"><div className="herotxt">
+    <p className="lead">{st.heroLine1}</p><h1>{st.heroLine2}</h1><div className="orn"><i /></div>
+    <button className="btn herobtn" onClick={() => scrollTo_('products')}>مشاهده محصولات <span>←</span></button></div></div></section>)
+}
+
 function Home() {
-  const s = S.useStore(), u = S.currentUser(s), st = s.settings, { q, clear } = useContext(Q)
-  const [cat, setCat] = useState(''), [all, setAll] = useState(false), prevQ = useRef('')
+  const s = S.useStore(), st = s.settings, { q, clear } = useContext(Q)
+  const [all, setAll] = useState(false), prevQ = useRef('')
   useEffect(() => { if (q && !prevQ.current) scrollTo_('products'); prevQ.current = q }, [q]) // فقط با اولین حرف اسکرول شود
-  const items = s.products.filter(p => (!cat || p.categoryId === cat) && (!q || (p.name + p.desc + S.catName(s, p)).includes(q.trim())))
-  const catTitle = st.categories.find(c => c.id === cat)?.name
+  const items = s.products.filter(p => !q || (p.name + p.desc + S.catName(s, p)).includes(q.trim()))
   const newest = [...s.products].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).slice(0, 8)
   const showAll = () => { setAll(true); setTimeout(() => scrollTo_('products'), 60) }
-  const filtered = q || cat || all
+  const filtered = q || all
   return (<>
     <div className="fold">
-    <section className="hero" style={{ '--hd': css_(st.heroImage || st.heroImageMobile), '--hm': css_(st.heroImageMobile || st.heroImage) }}><div className="wrap"><div className="herotxt">
-      <p className="lead">{st.heroLine1}</p><h1>{st.heroLine2}</h1><div className="orn"><i /></div>
-      <button className="btn herobtn" onClick={() => scrollTo_('products')}>مشاهده محصولات <span>←</span></button></div></div></section>
-    <div id="cats" className="wrap cats">{st.categories.map(c =>
-      <button key={c.id} className={'cat' + (cat === c.id ? ' on' : '')} style={bg(c.image)} onClick={() => { setCat(cat === c.id ? '' : c.id); scrollTo_('products') }}>
-        <span>{c.name}</span></button>)}</div>
+      <Hero st={st} />
+      <div id="cats" className="wrap cats">{st.categories.map(c =>
+        <Link key={c.id} to={`/category/${c.id}`} className="cat">
+          {c.image && <img src={c.image} alt={c.name} decoding="async" />}<span>{c.name}</span></Link>)}</div>
     </div>
     {!filtered && <Strip title="جدیدترین" em="محصولات" list={newest} s={s} onAll={showAll} />}
     {filtered
       ? <section id="products" className="wrap sec">
-          <div className="nhead"><h2>{q ? 'نتایج جستجو' : <>محصولات <em>ویژه</em></>}{catTitle && ` — ${catTitle}`}</h2>
+          <div className="nhead"><h2>{q ? 'نتایج جستجو' : <>محصولات <em>ویژه</em></>}</h2>
             {q ? <button className="lnk redlnk" onClick={clear}>پاک کردن جستجو ×</button>
-              : cat ? <button className="lnk redlnk" onClick={() => setCat('')}>حذف فیلتر ×</button>
-              : all && <button className="lnk redlnk" onClick={() => setAll(false)}>نمایش کمتر ›</button>}</div>
+              : <button className="lnk redlnk" onClick={() => setAll(false)}>نمایش کمتر ›</button>}</div>
           <div className="grid g4">{items.map(p => <ProductCard key={p.id} p={p} s={s} />)}{!items.length && <p>محصولی پیدا نشد.</p>}</div></section>
       : <Strip id="products" title="محصولات" em="ویژه" list={items} s={s} onAll={showAll} />}
-    <Reviews s={s} u={u} />
   </>)
+}
+
+function CategoryPage() {
+  const { id } = useParams(), s = S.useStore(), cats = s.settings.categories, c = cats.find(x => x.id === id)
+  useEffect(() => { if (!c) return; document.title = `${c.name} | ایل بافت`; return () => { document.title = 'ایل بافت | فروشگاه فرش' } }, [c?.name])
+  if (!c) return (<div className="wrap sec empty"><h2>دسته‌بندی پیدا نشد</h2><Link className="btn" to="/">بازگشت به فروشگاه</Link></div>)
+  const items = s.products.filter(p => p.categoryId === id).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+  return (<div className="wrap sec">
+    <div className="crumbs"><Link to="/">خانه</Link> / <span>{c.name}</span></div>
+    <div className="chips">{cats.map(x => <Link key={x.id} to={`/category/${x.id}`} className={x.id === id ? 'on' : ''}>{x.name}</Link>)}</div>
+    <div className="nhead"><h2>{c.name}</h2><small>{S.fa(items.length)} محصول</small></div>
+    <div className="grid g4">{items.map(p => <ProductCard key={p.id} p={p} s={s} />)}{!items.length && <p>هنوز محصولی در این دسته ثبت نشده است.</p>}</div></div>)
+}
+
+function SiteFooter({ st }) {
+  const f = st.footer || {}, links = S.contactLinks(f), seal = S.parseEnamad(f.enamad)
+  return (<footer className="sfooter"><div className="wrap fgrid">
+    <div><b className="fbrand">ایل بافت</b><p>{f.about}</p></div>
+    <div><h4>ارتباط با ما</h4>
+      {links.length > 0 && <div className="flinks">{links.map(l => <a key={l.key} href={l.href} dir={l.ltr ? 'ltr' : undefined} {...(/^https?:/.test(l.href) ? { target: '_blank', rel: 'noopener noreferrer' } : {})}>{l.label}</a>)}</div>}
+      {f.address && <p>{f.address}</p>}
+      {!links.length && !f.address && <p className="fmuted">راه‌های ارتباطی از پنل مدیریت تنظیم می‌شود.</p>}</div>
+    <div><h4>نماد اعتماد</h4>
+      {seal ? <a className="seal" href={seal.href} target="_blank" rel="noopener" referrerPolicy="origin"><img src={seal.src} alt="نماد اعتماد الکترونیکی" referrerPolicy="origin" /></a>
+        : <div className="sealph">محل نماد اعتماد (اینماد)</div>}</div>
+  </div><div className="fcopy">© ایل بافت — همه حقوق محفوظ است</div></footer>)
 }
 
 function ProductPage() {
@@ -164,7 +192,7 @@ function ProductPage() {
   const out = !(p.stock > 0)
   const add = () => { const r = S.addToCart(p.id); setAdded(r || 'ok'); setTimeout(() => setAdded(''), 1600) }
   return (<div className="wrap sec">
-    <div className="crumbs"><Link to="/">خانه</Link> / <span>{S.catName(s, p)}</span> / <span>{p.name}</span></div>
+    <div className="crumbs"><Link to="/">خانه</Link> / <Link to={`/category/${p.categoryId}`}>{S.catName(s, p)}</Link> / <span>{p.name}</span></div>
     <div className="pgrid">
       <div className="pbig" style={bg(p.image)} />
       <div className="pinfo"><h1>{p.name}</h1><small>{S.catName(s, p)}</small>
@@ -315,6 +343,7 @@ export default function App() {
     <Route path="/login" element={<Auth mode="login" />} />
     <Route path="/signup" element={<Auth mode="signup" />} />
     <Route path="/profile" element={<Profile />} />
+    <Route path="/category/:id" element={<CategoryPage />} />
     <Route path="/cart" element={<CartPage />} />
     <Route path="/admin" element={<Admin />} />
     <Route path="*" element={<Navigate to="/" />} />

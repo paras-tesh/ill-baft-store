@@ -4,12 +4,14 @@ import { useSyncExternalStore } from 'react'
 const BASE = import.meta.env?.BASE_URL || '/'
 const HERO_D = BASE + 'images/hero-desktop.jpg', HERO_M = BASE + 'images/hero-mobile.jpg'
 const CAT_IMG = { c3: BASE + 'images/cat-cushion.jpg', c4: BASE + 'images/cat-runner.jpg', c1: BASE + 'images/cat-canvas.jpg', c2: BASE + 'images/cat-rug.jpg' } // عکس پیش‌فرض دسته‌های کوسن و رانر
+const FOCUS_DEFAULT = { d: { x: 0.5, y: 0.45 }, m: { x: 0.5, y: 0.3 } } // نقطه اصلی عکس بنر (نسبت از ۰ تا ۱)
+const FOOTER_DEFAULT = { about: 'ایل بافت؛ فروشگاه فرش و محصولات دستباف با طرح‌های اصیل ایرانی و ارسال به سراسر کشور.', instagram: '', telegram: '', whatsapp: '', phone: '', email: '', address: '', enamad: '' }
 const KEY = 'illbaft_v1'
 const seed = {
   settings: {
     logo: '', tagline: 'زیبایی ماندگار خانه شما',
     topBar: 'ارسال به سراسر کشور | ضمانت اصالت کالا',
-    heroLine1: 'کوسن و رانر از تکه فرش‌های دستباف قدیمی', heroLine2: 'تک نسخه | اصیل', heroImage: HERO_D, heroImageMobile: HERO_M,
+    heroLine1: 'کوسن و رانر از تکه فرش‌های دستباف قدیمی', heroLine2: 'تک نسخه | اصیل', heroImage: HERO_D, heroImageMobile: HERO_M, heroFocus: FOCUS_DEFAULT, footer: FOOTER_DEFAULT,
     categories: [
       { id: 'c4', name: 'رانر و رومیزی', image: CAT_IMG.c4 }, { id: 'c3', name: 'کوسن', image: CAT_IMG.c3 },
       { id: 'c2', name: 'فرشینه', image: CAT_IMG.c2 }, { id: 'c1', name: 'بوم‌فرش', image: CAT_IMG.c1 }],
@@ -20,7 +22,7 @@ const seed = {
     { id: 'p2', name: 'رانر طرح لچک‌ترنج', price: 2400000, categoryId: 'c4', stock: 1, createdAt: 2, desc: 'رانر تک‌نسخه با رنگ سرمه‌ای و زرشکی.', image: '' }],
   reviews: [{ id: 'r1', name: 'مریم', rating: 5, text: 'کیفیت عالی بود و خیلی سریع رسید.', approved: true, date: Date.now() }],
   users: [],
-  session: null, isAdmin: false, carts: {}, orders: [], v: 9,
+  session: null, isAdmin: false, carts: {}, orders: [], v: 10,
 }
 let state
 try { state = JSON.parse(localStorage.getItem(KEY)) || seed } catch { state = seed }
@@ -58,6 +60,11 @@ if (state.v < 8) { // عکس پیش‌فرض دسته بوم‌فرش
 if (state.v < 9) { // عکس پیش‌فرض دسته فرشینه
   state.settings.categories.forEach(c => { if (!c.image && CAT_IMG[c.id]) c.image = CAT_IMG[c.id] })
   state.v = 9
+}
+if (state.v < 10) { // نقطه اصلی بنر و اطلاعات فوتر
+  state.settings.heroFocus = state.settings.heroFocus || structuredClone(FOCUS_DEFAULT)
+  state.settings.footer = state.settings.footer || structuredClone(FOOTER_DEFAULT)
+  state.v = 10
 }
 } catch (e) { // دیتای خراب: نسخه پشتیبان نگه داشته می‌شود و سایت با داده اولیه باز می‌شود
   console.error('migration failed', e)
@@ -198,3 +205,30 @@ export const updateOrder = (id, patch) => update(s => {
   }
   Object.assign(o, patch); return s
 })
+
+// ---- موقعیت عکس بنر: نقطه انتخابی ادمین (f) تا حد ممکن وسط کادر قرار می‌گیرد ----
+export function focusPos(box, img, f) {
+  if (!box || !img || !box[0] || !box[1]) return `${f.x * 100}% ${f.y * 100}%`
+  const [bw, bh] = box, [iw, ih] = img, k = Math.max(bw / iw, bh / ih), sw = iw * k, sh = ih * k
+  const axis = (b, s_, p) => (s_ - b < 1 ? 50 : Math.min(100, Math.max(0, ((p * s_ - b / 2) / (s_ - b)) * 100)))
+  return `${axis(bw, sw, f.x)}% ${axis(bh, sh, f.y)}%`
+}
+
+// ---- فوتر: لینک‌های ارتباطی و نماد اعتماد ----
+const handle = v => String(v || '').trim().replace(/^@/, '')
+const asUrl = (v, base) => (/^https?:\/\//i.test(String(v).trim()) ? String(v).trim() : base + encodeURIComponent(handle(v)))
+export function contactLinks(f = {}) {
+  const out = [], has = k => String(f[k] || '').trim()
+  if (has('instagram')) out.push({ key: 'instagram', label: 'اینستاگرام', href: asUrl(f.instagram, 'https://instagram.com/') })
+  if (has('telegram')) out.push({ key: 'telegram', label: 'تلگرام', href: asUrl(f.telegram, 'https://t.me/') })
+  if (has('whatsapp')) { const n = digits(f.whatsapp).replace(/\D/g, ''); out.push({ key: 'whatsapp', label: 'واتساپ', href: 'https://wa.me/' + (n.startsWith('0') ? '98' + n.slice(1) : n) }) }
+  if (has('phone')) out.push({ key: 'phone', label: has('phone'), href: 'tel:' + digits(f.phone).replace(/[^\d+]/g, ''), ltr: true })
+  if (has('email')) out.push({ key: 'email', label: has('email'), href: 'mailto:' + has('email'), ltr: true })
+  return out
+}
+// از کد HTML اینماد فقط آدرس لینک و عکس (https) برداشته می‌شود؛ خود کد اجرا نمی‌شود
+export function parseEnamad(code) {
+  const t = String(code || ''), pick = re => { const m = t.match(re); return m ? m[1].replace(/&amp;/g, '&') : '' }
+  const href = pick(/href\s*=\s*['"]([^'"]+)['"]/i), src = pick(/src\s*=\s*['"]([^'"]+)['"]/i)
+  return /^https:\/\//i.test(href) && /^https:\/\//i.test(src) ? { href, src } : null
+}

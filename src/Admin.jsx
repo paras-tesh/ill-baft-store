@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import * as S from './store.js'
 
 function ImgInput({ label, value, onChange, max = 1200, type }) {
@@ -11,6 +11,23 @@ function ImgInput({ label, value, onChange, max = 1200, type }) {
       url ? onChange(url) : alert('این فایل عکس معتبر نیست.')
     }} />
     {value && <button type="button" className="btn sm ghost" onClick={() => onChange('')}>حذف عکس</button>}</label>)
+}
+
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v))
+// انتخاب نقطه اصلی عکس بنر؛ کادر سفید ناحیه‌ای است که در بنر دیده می‌شود
+function FocusPicker({ image, focus, onChange, aspect, hint }) {
+  const ref = useRef(null), [dim, setDim] = useState(null)
+  useEffect(() => { if (!image) return setDim(null); const i = new Image(); i.onload = () => setDim([i.naturalWidth, i.naturalHeight]); i.src = image }, [image])
+  if (!image) return null
+  const pick = e => { const r = ref.current.getBoundingClientRect(); onChange({ x: clamp((e.clientX - r.left) / r.width), y: clamp((e.clientY - r.top) / r.height) }) }
+  let fw = 1, fh = 1
+  if (dim) { const ia = dim[0] / dim[1]; ia > aspect ? (fw = aspect / ia) : (fh = ia / aspect) }
+  const left = clamp(focus.x - fw / 2, 0, 1 - fw), top = clamp(focus.y - fh / 2, 0, 1 - fh)
+  return (<div className="focus"><small className="hint">{hint}</small>
+    <div className="fbox" ref={ref} onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); pick(e) }} onPointerMove={e => e.buttons && pick(e)}>
+      <img src={image} alt="" draggable="false" />
+      <div className="fframe" style={{ left: `${left * 100}%`, top: `${top * 100}%`, width: `${fw * 100}%`, height: `${fh * 100}%` }} />
+      <i className="fdot" style={{ left: `${focus.x * 100}%`, top: `${focus.y * 100}%` }} /></div></div>)
 }
 
 function Products({ s }) {
@@ -53,12 +70,38 @@ function Site({ s }) {
     <h3>بنر اصلی</h3>
     <input placeholder="متن کوچک بنر" value={d.heroLine1} onChange={set('heroLine1')} />
     <input placeholder="عنوان بزرگ بنر" value={d.heroLine2} onChange={set('heroLine2')} />
-    <ImgInput label="عکس بنر اصلی — دسکتاپ (افقی ۱۶:۹)" value={d.heroImage} onChange={heroImage => setD({ ...d, heroImage })} />
-    <ImgInput label="عکس بنر — موبایل (مربع یا عمودی)" value={d.heroImageMobile} onChange={heroImageMobile => setD({ ...d, heroImageMobile })} max={900} />
-    <h3>بنر دسته‌بندی محصولات</h3>
+    <ImgInput label="عکس بنر — دسکتاپ" value={d.heroImage} onChange={heroImage => setD({ ...d, heroImage })} max={1800} />
+    <small className="hint">اندازه پیشنهادی دسکتاپ: ۲۴۰۰×۸۰۰ پیکسل (نسبت ۳ به ۱). سوژه اصلی را وسط عکس بگذارید، چون روی صفحه‌های کوتاه‌تر یا بلندتر بالا و پایین عکس کمی بریده می‌شود.</small>
+    <FocusPicker image={d.heroImage} focus={d.heroFocus.d} aspect={3.4} onChange={f => setD({ ...d, heroFocus: { ...d.heroFocus, d: f } })} hint="روی بخش اصلی عکس بزنید یا بکشید؛ این نقطه تا حد ممکن وسط بنر دسکتاپ می‌افتد. کادر سفید = ناحیه‌ای که دیده می‌شود." />
+    <ImgInput label="عکس بنر — موبایل" value={d.heroImageMobile} onChange={heroImageMobile => setD({ ...d, heroImageMobile })} max={1100} />
+    <small className="hint">اندازه پیشنهادی موبایل: ۱۰۸۰×۱۰۰۰ پیکسل (تقریباً مربع). متن‌ها پایین بنر روی عکس می‌نشینند، پس سوژه را کمی بالاتر از وسط بگذارید.</small>
+    <FocusPicker image={d.heroImageMobile} focus={d.heroFocus.m} aspect={1.2} onChange={f => setD({ ...d, heroFocus: { ...d.heroFocus, m: f } })} hint="نقطه اصلی عکس موبایل را مشخص کنید." />
+    <h3>عکس دسته‌بندی‌ها</h3>
+    <small className="hint">اندازه پیشنهادی: ۹۰۰×۶۰۰ پیکسل (نسبت ۳ به ۲).</small>
     {d.categories.map((c, i) => <div key={c.id} className="catedit">
       <input required value={c.name} onChange={e => cat(i, { name: e.target.value })} />
       <ImgInput label="عکس" value={c.image} onChange={image => cat(i, { image })} max={700} /></div>)}
+    <button className="btn">ذخیره تغییرات</button>{ok && <span className="ok"> ذخیره شد ✓</span>}
+  </form>)
+}
+
+function FooterTab({ s }) {
+  const [d, setD] = useState(s.settings.footer || {}), [ok, setOk] = useState(false)
+  const set = k => e => setD({ ...d, [k]: e.target.value })
+  const save = e => { e.preventDefault(); if (!S.saveSettings({ footer: d })) return; setOk(true); setTimeout(() => setOk(false), 2000) }
+  return (<form className="card pad pform" onSubmit={save}>
+    <h3>متن کوتاه «درباره ما» در فوتر</h3>
+    <textarea value={d.about || ''} onChange={set('about')} />
+    <h3>راه‌های ارتباطی (هر کدام خالی باشد نمایش داده نمی‌شود)</h3>
+    <input dir="ltr" placeholder="اینستاگرام: نام کاربری یا لینک (مثلاً ill.baft)" value={d.instagram || ''} onChange={set('instagram')} />
+    <input dir="ltr" placeholder="تلگرام: نام کاربری یا لینک" value={d.telegram || ''} onChange={set('telegram')} />
+    <input dir="ltr" placeholder="واتساپ: شماره (مثلاً 09121234567)" value={d.whatsapp || ''} onChange={set('whatsapp')} />
+    <input dir="ltr" placeholder="تلفن تماس" value={d.phone || ''} onChange={set('phone')} />
+    <input dir="ltr" placeholder="ایمیل" value={d.email || ''} onChange={set('email')} />
+    <textarea placeholder="آدرس" value={d.address || ''} onChange={set('address')} />
+    <h3>نماد اعتماد الکترونیکی (اینماد)</h3>
+    <textarea dir="ltr" placeholder="کد HTML نماد را از پنل اینماد کپی و اینجا Paste کنید" value={d.enamad || ''} onChange={set('enamad')} />
+    {d.enamad && !S.parseEnamad(d.enamad) && <p className="err">کد معتبر نیست؛ باید شامل آدرس لینک و آدرس عکس با https باشد.</p>}
     <button className="btn">ذخیره تغییرات</button>{ok && <span className="ok"> ذخیره شد ✓</span>}
   </form>)
 }
@@ -94,12 +137,12 @@ function Orders({ s }) {
 
 function Panel() {
   const s = S.useStore(), [tab, setTab] = useState('products')
-  const tabs = { products: 'محصولات', orders: 'سفارش‌ها', site: 'بنرها و لوگو', reviews: 'نظرات' }
+  const tabs = { products: 'محصولات', orders: 'سفارش‌ها', site: 'بنرها و لوگو', footer: 'فوتر و تماس', reviews: 'نظرات' }
   const pend = s.orders.filter(o => o.status === 'pending').length
   return (<div className="wrap sec"><h2 className="title">پنل مدیریت</h2>
     <p className="meter">حافظه مرورگر: {S.fa(S.usedPct(s))}٪ پر است</p>
     <div className="tabs">{Object.entries(tabs).map(([k, v]) => <button key={k} className={'btn sm' + (tab === k ? '' : ' ghost')} onClick={() => setTab(k)}>{v}{k === 'orders' && pend ? ` (${S.fa(pend)})` : ''}</button>)}<button className="btn sm danger" onClick={S.adminLogout}>خروج از پنل</button></div>
-    {tab === 'products' && <Products s={s} />}{tab === 'orders' && <Orders s={s} />}{tab === 'site' && <Site s={s} />}{tab === 'reviews' && <Reviews s={s} />}</div>)
+    {tab === 'products' && <Products s={s} />}{tab === 'orders' && <Orders s={s} />}{tab === 'site' && <Site s={s} />}{tab === 'footer' && <FooterTab s={s} />}{tab === 'reviews' && <Reviews s={s} />}</div>)
 }
 
 export default function Admin() {
