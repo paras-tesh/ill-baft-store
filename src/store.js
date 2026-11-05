@@ -22,7 +22,7 @@ const seed = {
     { id: 'p2', name: 'رانر طرح لچک‌ترنج', price: 2400000, categoryId: 'c4', stock: 1, createdAt: 2, desc: 'رانر تک‌نسخه با رنگ سرمه‌ای و زرشکی.', image: '' }],
   reviews: [{ id: 'r1', name: 'مریم', rating: 5, text: 'کیفیت عالی بود و خیلی سریع رسید.', approved: true, date: Date.now() }],
   users: [],
-  session: null, isAdmin: false, carts: {}, orders: [], v: 10,
+  session: null, isAdmin: false, carts: {}, orders: [], v: 11,
 }
 let state
 try { state = JSON.parse(localStorage.getItem(KEY)) || seed } catch { state = seed }
@@ -65,6 +65,10 @@ if (state.v < 10) { // نقطه اصلی بنر و اطلاعات فوتر
   state.settings.heroFocus = state.settings.heroFocus || structuredClone(FOCUS_DEFAULT)
   state.settings.footer = state.settings.footer || structuredClone(FOOTER_DEFAULT)
   state.v = 10
+}
+if (state.v < 11) { // موجودی و قیمت فقط عدد صحیح
+  state.products.forEach(p => { p.stock = Math.max(0, Math.floor(Number(p.stock) || 0)); p.price = Math.max(0, Math.floor(Number(p.price) || 0)) })
+  state.v = 11
 }
 } catch (e) { // دیتای خراب: نسخه پشتیبان نگه داشته می‌شود و سایت با داده اولیه باز می‌شود
   console.error('migration failed', e)
@@ -110,8 +114,11 @@ export function adminLogin(pw) { if (pw !== ADMIN_PASSWORD) return 'رمز اش�
 export const adminLogout = () => update(s => (s.isAdmin = false, s))
 export const saveSettings = patch => update(s => (Object.assign(s.settings, patch), s))
 export const saveProduct = p => update(s => {
+  const item = { ...p, price: Math.max(0, Math.floor(Number(p.price) || 0)), stock: Math.max(0, Math.floor(Number(p.stock) || 0)) }
   const i = s.products.findIndex(x => x.id === p.id)
-  i >= 0 ? (s.products[i] = p) : s.products.unshift({ ...p, id: uid(), createdAt: Date.now() }); return s })
+  i >= 0 ? (s.products[i] = item) : s.products.unshift({ ...item, id: uid(), createdAt: Date.now() })
+  return s
+})
 export const deleteProduct = id => update(s => (s.products = s.products.filter(p => p.id !== id), s))
 export function addReview({ name, productId, rating, text }) { // موفق: undefined، ناموفق: متن خطا
   const u = currentUser(get()); text = (text || '').trim()
@@ -231,4 +238,38 @@ export function parseEnamad(code) {
   const t = String(code || ''), pick = re => { const m = t.match(re); return m ? m[1].replace(/&amp;/g, '&') : '' }
   const href = pick(/href\s*=\s*['"]([^'"]+)['"]/i), src = pick(/src\s*=\s*['"]([^'"]+)['"]/i)
   return /^https:\/\//i.test(href) && /^https:\/\//i.test(src) ? { href, src } : null
+}
+
+// ---- عدد صحیح از ورودی فرم (ارقام فارسی و جداکننده هزارگان مجاز است)؛ نامعتبر = null ----
+export const toInt = v => {
+  const t = digits(v).replace(/[٬,\s]/g, '')
+  return /^\d+$/.test(t) ? Number(t) : null
+}
+
+// ---- فهرست محصولات: جستجو، مرتب‌سازی و محبوبیت ----
+export const SORTS = { newest: 'جدیدترین', popular: 'محبوب‌ترین', cheap: 'ارزان‌ترین', expensive: 'گران‌ترین' }
+
+export const searchProducts = (s, q, list = s.products) => {
+  const text = (q || '').trim()
+  return text ? list.filter(p => `${p.name} ${p.desc} ${catName(s, p)}`.includes(text)) : list
+}
+
+// تعداد فروش هر محصول از سفارش‌های لغو‌نشده
+export function soldMap(s) {
+  const sold = {}
+  s.orders.forEach(o => {
+    if (o.status === 'canceled') return
+    o.items.forEach(i => { sold[i.id] = (sold[i.id] || 0) + i.qty })
+  })
+  return sold
+}
+
+export function sortProducts(list, sort, sold = {}) {
+  const byNewest = (a, b) => (b.createdAt || 0) - (a.createdAt || 0)
+  const out = [...list]
+  if (sort === 'popular') out.sort((a, b) => (sold[b.id] || 0) - (sold[a.id] || 0) || byNewest(a, b))
+  else if (sort === 'cheap') out.sort((a, b) => a.price - b.price || byNewest(a, b))
+  else if (sort === 'expensive') out.sort((a, b) => b.price - a.price || byNewest(a, b))
+  else out.sort(byNewest)
+  return out
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useContext, useRef, createContext } from 'react'
-import { Routes, Route, Link, NavLink, useNavigate, useLocation, useParams, Navigate } from 'react-router-dom'
+import { Routes, Route, Link, NavLink, useNavigate, useLocation, useParams, useSearchParams, Navigate } from 'react-router-dom'
 import * as S from './store.js'
 import Admin from './Admin.jsx'
 
@@ -18,11 +18,12 @@ const scrollTo_ = id => document.getElementById(id)?.scrollIntoView({ behavior: 
 function Layout({ children }) {
   const s = S.useStore(), u = S.currentUser(s), { settings: st } = s
   const go = useNavigate(), loc = useLocation(), home = loc.pathname === '/'
+  const searchable = home || loc.pathname.startsWith('/products') || loc.pathname.startsWith('/category') // جستجو روی همین صفحه‌ها اعمال می‌شود
   const [q, setQ] = useState(''), [open, setOpen] = useState(false), popRef = useRef(null), skipClose = useRef(false)
   const goto = id => { if (!home) go('/'); setTimeout(() => scrollTo_(id), 60) }
   const top = () => { setOpen(false); setQ(''); go('/'); scrollTo({ top: 0, behavior: 'smooth' }) }
-  const onSearch = v => { setQ(v); if (!home) { skipClose.current = true; go('/') } }
-  const submit = e => { e.preventDefault(); setOpen(false); if (!home) go('/'); setTimeout(() => scrollTo_('products'), 60) }
+  const onSearch = v => { setQ(v); if (!searchable) { skipClose.current = true; go('/') } }
+  const submit = e => { e.preventDefault(); setOpen(false); if (!searchable) go('/'); setTimeout(() => scrollTo_('products'), 60) }
   const userPage = ['/login', '/signup', '/profile'].includes(loc.pathname)
   useEffect(() => { // بستن جعبه جستجو با کلیک بیرون یا Esc
     if (!open) return
@@ -42,7 +43,7 @@ function Layout({ children }) {
       </Link>
       <nav>
         <NavLink to="/" end>صفحه اصلی</NavLink>
-        <button className="lnk" onClick={() => goto('products')}>محصولات</button>
+        <NavLink to="/products">محصولات</NavLink>
       </nav>
       <div className="acts">
         <button className="iconbtn" data-search-toggle onClick={() => setOpen(!open)} title="جستجو" aria-label="جستجو" aria-expanded={open}>{SearchI}</button>
@@ -120,7 +121,7 @@ function Strip({ id, title, em, list, s, onAll }) {
 }
 
 function Hero({ st }) {
-  const ref = useRef(null)
+  const ref = useRef(null), go = useNavigate()
   const [mobile, setMobile] = useState(() => matchMedia('(max-width:760px)').matches), [dims, setDims] = useState({ box: null, img: null })
   const url = mobile ? (st.heroImageMobile || st.heroImage) : (st.heroImage || st.heroImageMobile)
   const focus = (mobile ? st.heroFocus?.m : st.heroFocus?.d) || { x: 0.5, y: 0.5 }
@@ -129,17 +130,16 @@ function Hero({ st }) {
   useEffect(() => { const el = ref.current; if (!el) return; const ro = new ResizeObserver(() => setDims(d => ({ ...d, box: [el.clientWidth, el.clientHeight] }))); ro.observe(el); return () => ro.disconnect() }, [])
   return (<section ref={ref} className="hero" style={{ backgroundImage: css_(url), backgroundPosition: S.focusPos(dims.box, dims.img, focus) }}><div className="wrap"><div className="herotxt">
     <p className="lead">{st.heroLine1}</p><h1>{st.heroLine2}</h1><div className="orn"><i /></div>
-    <button className="btn herobtn" onClick={() => scrollTo_('products')}>مشاهده محصولات <span>←</span></button></div></div></section>)
+    <button className="btn herobtn" onClick={() => go('/products?sort=newest')}>مشاهده محصولات <span>←</span></button></div></div></section>)
 }
 
 function Home() {
-  const s = S.useStore(), st = s.settings, { q, clear } = useContext(Q)
-  const [all, setAll] = useState(false), prevQ = useRef('')
+  const s = S.useStore(), st = s.settings, go = useNavigate(), { q, clear } = useContext(Q)
+  const prevQ = useRef('')
   useEffect(() => { if (q && !prevQ.current) scrollTo_('products'); prevQ.current = q }, [q]) // فقط با اولین حرف اسکرول شود
-  const items = s.products.filter(p => !q || (p.name + p.desc + S.catName(s, p)).includes(q.trim()))
-  const newest = [...s.products].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).slice(0, 8)
-  const showAll = () => { setAll(true); setTimeout(() => scrollTo_('products'), 60) }
-  const filtered = q || all
+  const results = S.searchProducts(s, q)
+  const newest = S.sortProducts(s.products, 'newest').slice(0, 8)
+  const popular = S.sortProducts(s.products, 'popular', S.soldMap(s)).slice(0, 8)
   return (<>
     <div className="fold">
       <Hero st={st} />
@@ -147,27 +147,51 @@ function Home() {
         <Link key={c.id} to={`/category/${c.id}`} className="cat">
           {c.image && <img src={c.image} alt={c.name} decoding="async" />}<span>{c.name}</span></Link>)}</div>
     </div>
-    {!filtered && <Strip title="جدیدترین" em="محصولات" list={newest} s={s} onAll={showAll} />}
-    {filtered
+    {q
       ? <section id="products" className="wrap sec">
-          <div className="nhead"><h2>{q ? 'نتایج جستجو' : <>محصولات <em>ویژه</em></>}</h2>
-            {q ? <button className="lnk redlnk" onClick={clear}>پاک کردن جستجو ×</button>
-              : <button className="lnk redlnk" onClick={() => setAll(false)}>نمایش کمتر ›</button>}</div>
-          <div className="grid g4">{items.map(p => <ProductCard key={p.id} p={p} s={s} />)}{!items.length && <p>محصولی پیدا نشد.</p>}</div></section>
-      : <Strip id="products" title="محصولات" em="ویژه" list={items} s={s} onAll={showAll} />}
+          <div className="nhead"><h2>نتایج جستجو</h2><button className="lnk redlnk" onClick={clear}>پاک کردن جستجو ×</button></div>
+          <div className="grid g4">{results.map(p => <ProductCard key={p.id} p={p} s={s} />)}{!results.length && <p>محصولی پیدا نشد.</p>}</div></section>
+      : <>
+          <Strip title="جدیدترین" em="محصولات" list={newest} s={s} onAll={() => go('/products?sort=newest')} />
+          <Strip id="products" title="محصولات" em="ویژه" list={popular} s={s} onAll={() => go('/products?sort=popular')} />
+        </>}
   </>)
 }
 
-function CategoryPage() {
-  const { id } = useParams(), s = S.useStore(), cats = s.settings.categories, c = cats.find(x => x.id === id)
-  useEffect(() => { if (!c) return; document.title = `${c.name} | ایل بافت`; return () => { document.title = 'ایل بافت | فروشگاه فرش' } }, [c?.name])
-  if (!c) return (<div className="wrap sec empty"><h2>دسته‌بندی پیدا نشد</h2><Link className="btn" to="/">بازگشت به فروشگاه</Link></div>)
-  const items = s.products.filter(p => p.categoryId === id).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+// صفحه همه محصولات (/products) و صفحه جدای هر دسته (/category/:id) با فیلتر و مرتب‌سازی
+function ProductListPage({ byCategory }) {
+  const s = S.useStore(), { id } = useParams(), [params, setParams] = useSearchParams(), { q, clear } = useContext(Q)
+  const cats = s.settings.categories
+  const cat = byCategory ? cats.find(c => c.id === id) : null
+  const sort = S.SORTS[params.get('sort')] ? params.get('sort') : 'newest'
+  const inStockOnly = params.get('stock') === '1'
+  const title = cat ? cat.name : 'همه محصولات'
+  useEffect(() => { document.title = `${title} | ایل بافت`; return () => { document.title = 'ایل بافت | فروشگاه فرش' } }, [title])
+  if (byCategory && !cat) return (<div className="wrap sec empty"><h2>دسته‌بندی پیدا نشد</h2><Link className="btn" to="/products">دیدن همه محصولات</Link></div>)
+
+  const base = s.products.filter(p => (!cat || p.categoryId === cat.id) && (!inStockOnly || p.stock > 0))
+  const items = S.sortProducts(S.searchProducts(s, q, base), sort, S.soldMap(s))
+  const setParam = (key, value) => {
+    const next = new URLSearchParams(params)
+    value ? next.set(key, value) : next.delete(key)
+    setParams(next, { replace: true })
+  }
   return (<div className="wrap sec">
-    <div className="crumbs"><Link to="/">خانه</Link> / <span>{c.name}</span></div>
-    <div className="chips">{cats.map(x => <Link key={x.id} to={`/category/${x.id}`} className={x.id === id ? 'on' : ''}>{x.name}</Link>)}</div>
-    <div className="nhead"><h2>{c.name}</h2><small>{S.fa(items.length)} محصول</small></div>
-    <div className="grid g4">{items.map(p => <ProductCard key={p.id} p={p} s={s} />)}{!items.length && <p>هنوز محصولی در این دسته ثبت نشده است.</p>}</div></div>)
+    <div className="crumbs"><Link to="/">خانه</Link> / {cat ? <><Link to="/products">محصولات</Link> / <span>{cat.name}</span></> : <span>محصولات</span>}</div>
+    <div className="chips">
+      <Link to="/products" className={cat ? '' : 'on'}>همه</Link>
+      {cats.map(c => <Link key={c.id} to={`/category/${c.id}`} className={cat?.id === c.id ? 'on' : ''}>{c.name}</Link>)}
+    </div>
+    <div className="nhead"><h1>{title}</h1><small>{S.fa(items.length)} محصول</small></div>
+    <div className="sortbar">
+      <span>مرتب‌سازی:</span>
+      {Object.entries(S.SORTS).map(([key, label]) =>
+        <button key={key} className={'pill' + (sort === key ? ' on' : '')} onClick={() => setParam('sort', key)}>{label}</button>)}
+      <label className="chk"><input type="checkbox" checked={inStockOnly} onChange={e => setParam('stock', e.target.checked ? '1' : '')} />فقط کالاهای موجود</label>
+    </div>
+    {q && <p className="hint">نتایج جستجو برای «{q}» <button className="lnk redlnk" onClick={clear}>پاک کردن ×</button></p>}
+    <div className="grid g4">{items.map(p => <ProductCard key={p.id} p={p} s={s} />)}{!items.length && <p>محصولی با این فیلترها پیدا نشد.</p>}</div>
+  </div>)
 }
 
 function SiteFooter({ st }) {
@@ -343,7 +367,8 @@ export default function App() {
     <Route path="/login" element={<Auth mode="login" />} />
     <Route path="/signup" element={<Auth mode="signup" />} />
     <Route path="/profile" element={<Profile />} />
-    <Route path="/category/:id" element={<CategoryPage />} />
+    <Route path="/products" element={<ProductListPage />} />
+    <Route path="/category/:id" element={<ProductListPage byCategory />} />
     <Route path="/cart" element={<CartPage />} />
     <Route path="/admin" element={<Admin />} />
     <Route path="*" element={<Navigate to="/" />} />
